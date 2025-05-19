@@ -24,7 +24,7 @@ gwas_chr22 <- bigreadr::fread2(path_gwas_chr22)
 
 # remove columns
 sumstats <- gwas_chr22 |>
-  dplyr::filter(GENPOS > 17096864, GENPOS < 25426545) |>
+  #dplyr::filter(GENPOS > 17096864, GENPOS < 25426545) |>
   dplyr::select(- c(TEST, EXTRA, CHISQ)) |>
   dplyr::mutate(
     MAF = ifelse(A1FREQ > 0.5, 1 - A1FREQ, A1FREQ)
@@ -56,7 +56,7 @@ names(sumstats) <- c(
 # 3. Calculate the LD matrix
 
 # Get maximum amount of cores
-NCORES <- nb_cores()
+NCORES <- bigstatsr::nb_cores()
 
 # Open a temporary file
 tmp <- tempfile(tmpdir = "tmp-data")
@@ -70,12 +70,12 @@ ld <- NULL
 fam.order <- NULL
 
 # preprocess the bed file (only need to do once for each data set)
-#bigsnpr::snp_readBed(path_geno_chr22)
-bigsnpr::snp_readBed(path_geno_test)
+bigsnpr::snp_readBed(path_geno_chr22)
+#bigsnpr::snp_readBed(path_geno_test)
 
 
 # now attach the genotype object
-obj.bigSNP <- bigsnpr::snp_attach(path_rds_test)
+obj.bigSNP <- bigsnpr::snp_attach(path_rds_chr22)
 
 # extract the SNP information from the genotype
 map <- obj.bigSNP$map[-3]
@@ -106,7 +106,7 @@ for (chr in 22:22) {
   ind.chr <- which(info_snp$chr == chr)
   ind.chr2 <- info_snp$`_NUM_ID_`[ind.chr]
   # Calculate the LD
-  corr0 <- snp_cor(
+  corr0 <- bigsnpr::snp_cor(
     genotype,
     ind.col = ind.chr2,
     ncores = NCORES,
@@ -125,23 +125,23 @@ for (chr in 22:22) {
 corr <- bigsparser::as_SFBM(as(corr0, "dgCMatrix"))
 
 # file size in GB
-file.size(corr$sbk) / 1024^3
+#file.size(corr$sbk) / 1024^3
 
 # We assume the fam order is the same across different chromosomes
-fam.order <- data.table::as.data.table(obj.bigSNP$fam)
+#fam.order <- data.table::as.data.table(obj.bigSNP$fam)
 
 # Rename fam order
-data.table::setnames(
-  fam.order,
-  c("family.ID", "sample.ID"),
-  c("FID", "IID")
-  )
+# data.table::setnames(
+#   fam.order,
+#   c("family.ID", "sample.ID"),
+#   c("FID", "IID")
+#   )
 
 #----------------#
 # 4. Perform LD score regression
 df_beta <- info_snp[,c("beta", "beta_se", "n_eff", "_NUM_ID_")]
 
-ldsc <- snp_ldsc(
+ldsc <- bigsnpr::snp_ldsc(
   ld, 
   length(ld), 
   chi2 = (df_beta$beta / df_beta$beta_se)^2,
@@ -149,7 +149,7 @@ ldsc <- snp_ldsc(
   blocks = NULL
   )
 
-
+ldsc <- bigsnpr::snp_ldsc2(corr0, df_beta)
 h2_est <- ldsc[["h2"]]
 
 
@@ -172,7 +172,7 @@ h2_est <- ldsc[["h2"]]
 # null.r2 <- null.model$r.squared
 
 # infinitesimal model
-beta_inf <- snp_ldpred2_inf(corr, df_beta, h2 = h2_est)
+beta_inf <- bigsnpr::snp_ldpred2_inf(corr, df_beta, h2 = h2_est)
 
 
 #----------------#
@@ -181,10 +181,10 @@ beta_inf <- snp_ldpred2_inf(corr, df_beta, h2 = h2_est)
 # calculate PRS for all samples
 ind.test <- 1:nrow(genotype)
 
-pred_inf <- big_prodVec(
+pred_inf <- bigstatsr::big_prodVec(
   genotype,
   beta_inf,
-  ind.row = ind.test,
+  #ind.row = ind.test,
   ind.col = info_snp$`_NUM_ID_`
   )
 
